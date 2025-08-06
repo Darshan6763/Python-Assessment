@@ -1,0 +1,53 @@
+#!/bin/bash
+
+
+DATE=$(date +%F)  # YYYY-MM-DD format
+PROCESS_LOG="process_log_$DATE.log"
+HIGH_MEM_LOG="high_mem_processes.log"
+MEM_THRESHOLD=30.0
+DISK_THRESHOLD=80
+ROOT_PART="/"
+
+
+echo "🔍 System Health Check - $DATE"
+echo "-----------------------------------"
+
+
+echo "[1] Logging all running processes to '$PROCESS_LOG'..."
+ps -eo pid,ppid,user,%mem,%cpu,cmd --sort=-%mem > "$PROCESS_LOG"
+
+
+echo "[2] Checking for processes using >${MEM_THRESHOLD}% memory..."
+HIGH_MEM_PROCESSES=$(awk -v threshold="$MEM_THRESHOLD" 'NR>1 && $4 > threshold' "$PROCESS_LOG")
+
+HIGH_MEM_COUNT=$(echo "$HIGH_MEM_PROCESSES" | grep -c .)
+
+if (( HIGH_MEM_COUNT > 0 )); then
+    echo "⚠️  $HIGH_MEM_COUNT high memory usage process(es) found!"
+    {
+        echo "[$DATE] High memory usage detected:"
+        echo "$HIGH_MEM_PROCESSES"
+        echo "---------------------------------------"
+    } >> "$HIGH_MEM_LOG"
+else
+    echo "✅ No high memory usage processes found."
+fi
+
+
+DISK_USAGE=$(df --output=pcent "$ROOT_PART" | tail -1 | tr -dc '0-9')
+echo "[3] Root partition usage: ${DISK_USAGE}%"
+if (( DISK_USAGE > DISK_THRESHOLD )); then
+    echo "⚠️  Disk usage exceeds ${DISK_THRESHOLD}%!"
+else
+    echo "✅ Disk usage is within safe limits."
+fi
+
+
+TOTAL_PROCESSES=$(($(wc -l < "$PROCESS_LOG") - 1))  
+
+echo ""
+echo "========= ✅ Summary ========="
+echo "Total running processes      : $TOTAL_PROCESSES"
+echo "High memory processes (>30%) : $HIGH_MEM_COUNT"
+echo "Disk usage on / partition    : ${DISK_USAGE}%"
+echo "=============================="
